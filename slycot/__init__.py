@@ -20,7 +20,7 @@ else:
 
     # Filtering routines (0/6 wrapped)
 
-    # Identification routines (0/5 wrapped)
+    # Identification routines (3/5 wrapped)
     from slycot.identify import ib01ad, ib01bd, ib01cd
 	
     # Mathematical routines (3/81 wrapped)
