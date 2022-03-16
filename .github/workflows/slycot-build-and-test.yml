@@ -47,6 +47,7 @@ jobs:
 
   build-pip-debian:
     name: Build pip Py${{ matrix.python }}, ${{ matrix.os }}, ${{ matrix.bla_vendor}} BLA_VENDOR
+    runs-on: ubuntu-20.04
     container:
       image: debian:bullseye
     needs: build-setup
