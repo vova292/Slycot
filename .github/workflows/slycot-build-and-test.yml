@@ -68,6 +68,10 @@ jobs:
 #            bla_vendor: 'OpenBLAS'
 
     steps:
+      - name: Setup git
+        run:  |
+          apt-get -y update
+          apt-get -y install git
       - name: Checkout Slycot
         uses: actions/checkout@v2
         with:
