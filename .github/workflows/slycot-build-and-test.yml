@@ -204,7 +204,6 @@ jobs:
     name: Finalize parallel coveralls
     if: always()
     needs:
-      - test-conda
       - test-wheel
     runs-on: ubuntu-latest
     steps:
