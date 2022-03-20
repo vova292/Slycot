@@ -17,7 +17,7 @@ subroutine ib01ad(meth,alg,jobd,batch,conct,ctrl,nobr,m,l,nsmp,u,ldu,y,ldy,n,r,l
     double precision dimension(ldy,l) :: y
     integer, optional,check(shape(y,0)==ldy),depend(y) :: ldy=shape(y,0)
     integer intent(out):: n
-    double precision intent(inout), dimension(ldr,2*(m+l)*nobr) :: r
+    double precision intent(inout), dimension(ldr,*) :: r
     integer, optional,check(shape(r,0)==ldr),depend(r) :: ldr=shape(r,0)
     double precision intent(out), dimension(l*nobr) :: sv
     double precision :: rcond
@@ -37,7 +37,7 @@ subroutine ib01bd(meth,job,jobck,nobr,n,m,l,nsmpl,r,ldr,a,lda,c,ldc,b,ldb,d,ldd,
     integer :: m
     integer :: l
     integer :: nsmpl
-    double precision intent(inout),dimension(ldr,2*(m+l)*nobr) :: r
+    double precision intent(inout),dimension(ldr,*) :: r
     integer, optional,check(shape(r,0)==ldr),depend(r) :: ldr=shape(r,0)
     double precision ,intent(in,out),dimension(lda,n),depend(lda, n) :: a
     integer :: lda
