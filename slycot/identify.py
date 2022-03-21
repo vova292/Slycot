@@ -330,7 +330,7 @@ def ib01ad(meth, alg, jobd, conct, ctrl, nobr, data, rcond=-1, tol=-1):
 
             '''
 
-        iwork = _np.zeros((liwork,), dtype=_np.int)
+        iwork = _np.zeros((liwork,), dtype=int)
         dwork = _np.zeros((ldwork,))
 
         args_list = ['meth', 'alg', 'jobd', 'batch', 'conct', 'ctrl', 'nobr',
@@ -662,7 +662,7 @@ def ib01bd(meth, job, jobck, nobr, n, m, l, nsmpl, r, A, C, tol=0):
     ldw3 = max(4*n*n + 2*n*l + l*l + max(3*l, n*l), 14*n*n + 12*n + 5)
     ldwork = max(ldw1, ldw2, ldw3)
 
-    iwork = _np.zeros((liwork, ), dtype=_np.int)
+    iwork = _np.zeros((liwork, ), dtype=int)
     dwork = _np.zeros((ldwork, ))
     bwork = _np.zeros((2*n, ), dtype=_np.int32)
 
@@ -947,7 +947,7 @@ def ib01cd(jobx0, comuse, job, A, B, C, D, data):
 
         ldwork = ldw1 + n*(n + m + l) + max(5*n, ldw1, min(ldw2, ldw3))
 
-        iwork = _np.zeros((liwork,), dtype=_np.int)
+        iwork = _np.zeros((liwork,), dtype=int)
         dwork = _np.zeros((ldwork,))
         ldv = max(1, n)
         out = _wrapper.ib01cd(jobx0, comuse, job, nsmp, A, B, C, D, u, y, ldv,
