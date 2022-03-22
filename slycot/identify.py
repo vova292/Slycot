@@ -22,7 +22,6 @@
 
 from slycot import _wrapper
 import numpy as _np
-import warnings
 
 
 def ib01ad(meth, alg, jobd, conct, ctrl, nobr, data, rcond=-1, tol=-1):
