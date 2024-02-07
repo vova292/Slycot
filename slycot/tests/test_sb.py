@@ -1,14 +1,14 @@
 # ===================================================
 # sb* synthesis tests
 
-from slycot import synthesis
-from slycot.exceptions import raise_if_slycot_error, \
-                              SlycotParameterError, SlycotArithmeticError, \
-                              SlycotResultWarning
-
+import pytest
 from numpy import array, eye, zeros
 from numpy.testing import assert_allclose, assert_raises
-import pytest
+
+from slycot import synthesis
+from slycot.exceptions import (SlycotArithmeticError, SlycotParameterError,
+                               SlycotResultWarning, raise_if_slycot_error)
+
 from .test_exceptions import assert_docstring_parse
 
 
@@ -192,9 +192,9 @@ def test_sb10fd_2():
                                                                 'dico': 'C'}),
      (synthesis.sb03od, SlycotResultWarning,   [1, 2],         {'dico': 'C',
                                                                 'fact': 'N'}),
-     (synthesis.sb03od, SlycotResultWarning,   [1, 2],         {'dico': 'D',
+     (synthesis.sb03od, SlycotResultWarning,   [1, 2, 3],      {'dico': 'D',
                                                                 'fact': 'N'}),
-     (synthesis.sb03od, SlycotArithmeticError, [3, 4, 5, 6],   {'dico': 'D',
+     (synthesis.sb03od, SlycotArithmeticError, [4, 5, 6],      {'dico': 'D',
                                                                 'fact': 'F'}),
      (synthesis.sb04md, SlycotArithmeticError, 2,              {'m': 1}),
      (synthesis.sb04qd, SlycotArithmeticError, 3,              {'m': 2}),
