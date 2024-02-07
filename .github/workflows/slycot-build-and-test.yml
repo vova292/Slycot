@@ -12,42 +12,44 @@ on:
 
 jobs:
 
-  build-setup:
+  build-sdist:
     # Super fast sniff build. If this fails, don't start the other jobs
     name: Build sdist on Ubuntu
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: '3.11'
       - name: Setup Ubuntu
         run: |
           sudo apt-get -y install gfortran cmake --fix-missing
           sudo apt-get -y install libblas-dev liblapack-dev
-          pip install scikit-build numpy scipy pytest
       - name: Create Slycot sdist
-        run: python setup.py sdist
-
+        run: |
+          pip install build
+          python -m build --sdist
       - name: Install Slycot sdist
         run: |
           mkdir cleancwd
           cd cleancwd
           tar xfz ../dist/slycot-*.tar.gz
           cd slycot-*
-          python setup.py install
+          pip install -v .
       - name: Run tests
-        run: pytest
+        run: |
+          pip install scipy pytest
+          pytest
 
   build-pip:
     name: Build pip Py${{ matrix.python }}, ${{ matrix.os }}, ${{ matrix.bla_vendor}} BLA_VENDOR
     runs-on: ${{ matrix.os }}-latest
-    needs: build-setup
+    needs: build-sdist
     strategy:
         fail-fast: false
         matrix:
@@ -55,35 +57,34 @@ jobs:
               - 'ubuntu'
               - 'macos'
             python:
-              - '3.7'
-              - '3.9'
               - '3.10'
+              - '3.12'
             bla_vendor: [ 'unset' ]
             include:
               - os: 'ubuntu'
-                python: '3.9'
+                python: '3.12'
                 bla_vendor: 'Generic'
               - os: 'ubuntu'
-                python: '3.9'
+                python: '3.12'
                 bla_vendor: 'OpenBLAS'
               - os: 'macos'
-                python: '3.9'
+                python: '3.12'
                 bla_vendor: 'Apple'
               - os: 'macos'
-                python: '3.9'
+                python: '3.12'
                 bla_vendor: 'Generic'
               - os: 'macos'
-                python: '3.9'
+                python: '3.12'
                 bla_vendor: 'OpenBLAS'
 
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
       - name: Setup Ubuntu
@@ -112,7 +113,7 @@ jobs:
               echo "bla_vendor option ${{ matrix.bla_vendor }} not supported"
               exit 1 ;;
           esac
-          echo "FC=gfortran-10" >> $GITHUB_ENV
+          echo "FC=gfortran-11" >> $GITHUB_ENV
       - name: Build wheel
         env:
           BLA_VENDOR: ${{ matrix.bla_vendor }}
@@ -125,15 +126,15 @@ jobs:
           mkdir -p ${wheeldir}
           cp ./slycot*.whl ${wheeldir}/
       - name: Save wheel
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: slycot-wheels
           path: slycot-wheels
 
   build-conda:
-    name: Build conda Py${{ matrix.python }}, ${{ matrix.os }}
+    name: Build conda, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}-latest
-    needs: build-setup
+    needs: build-sdist
     strategy:
         fail-fast: false
         matrix:
@@ -142,12 +143,12 @@ jobs:
             - 'macos'
             - 'windows'
           python:
-            - '3.9'
-            - '3.10'
+          # this is not the packaged version, just the version conda-build runs on.
+            - '3.11'
 
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           submodules: 'recursive'
@@ -156,7 +157,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           activate-environment: build-env
-          channels: conda-forge
+          environment-file: .github/conda-env/build-env.yml
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
           channel-priority: strict
           auto-update-conda: false
           auto-activate-base: false
@@ -164,17 +167,16 @@ jobs:
         shell: bash -l {0}
         run: |
           set -e
-          conda install conda-build conda-verify numpy
-          numpyversion=$(python -c 'import numpy; print(numpy.version.version)')
-          conda-build --python "${{ matrix.python }}" --numpy $numpyversion conda-recipe
+          conda mambabuild conda-recipe
           # preserve directory structure for custom conda channel
           find "${CONDA_PREFIX}/conda-bld" -maxdepth 2 -name 'slycot*.tar.bz2' | while read -r conda_pkg; do
             conda_platform=$(basename $(dirname "${conda_pkg}"))
             mkdir -p "slycot-conda-pkgs/${conda_platform}"
             cp "${conda_pkg}" "slycot-conda-pkgs/${conda_platform}/"
           done
+          conda index --no-progress ./slycot-conda-pkgs
       - name: Save to local conda pkg channel
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: slycot-conda-pkgs
           path: slycot-conda-pkgs
@@ -188,16 +190,14 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Download wheels (if any)
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: slycot-wheels
           path: slycot-wheels
       - id: set-matrix
-        run: |
-          matrix=$(python3 .github/scripts/set-pip-test-matrix.py)
-          echo "::set-output name=matrix::$matrix"
+        run: echo "matrix=$(python3 .github/scripts/set-pip-test-matrix.py)" >> $GITHUB_OUTPUT
 
   create-conda-test-matrix:
     name: Create conda test matrix
@@ -208,16 +208,14 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Download conda packages
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: slycot-conda-pkgs
           path: slycot-conda-pkgs
       - id: set-matrix
-        run: |
-          matrix=$(python3 .github/scripts/set-conda-test-matrix.py)
-          echo "::set-output name=matrix::$matrix"
+        run: echo "matrix=$(python3 .github/scripts/set-conda-test-matrix.py)" >> $GITHUB_OUTPUT
 
 
   test-wheel:
@@ -232,16 +230,16 @@ jobs:
 
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: slycot-src
       - name: Checkout python-control
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: 'python-control/python-control'
           path: python-control
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
       - name: Setup Ubuntu
@@ -274,26 +272,26 @@ jobs:
               exit 1 ;;
           esac
       - name: Download wheels
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: slycot-wheels
           path: slycot-wheels
       - name: Install Wheel
         run: |
           python -m pip install --upgrade pip
-          pip install matplotlib scipy pytest pytest-cov pytest-timeout coverage coveralls
+          pip install matplotlib scipy pytest pytest-cov pytest-timeout coverage
           pip install slycot-wheels/${{ matrix.packagekey }}/slycot*.whl
           pip show slycot
       - name: Slycot and python-control tests
-        run: bash slycot-src/.github/scripts/run-tests.sh
-      - name: report coverage
+        run: JOBNAME="$JOBNAME" bash slycot-src/.github/scripts/run-tests.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: wheel-${{ matrix.packagekey }}-${{matrix.blas_lib}}
-          COVERALLS_PARALLEL: true
-        working-directory: slycot-src
-        # https://github.com/TheKevJames/coveralls-python/issues/252
-        run: coveralls --service=github
+          JOBNAME: wheel ${{ matrix.packagekey }} ${{ matrix.blas_lib }}
+      - name: report coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          flag-name: wheel-${{ matrix.packagekey }}-${{matrix.blas_lib}}
+          parallel: true
+          file: slycot-src/coverage.xml
 
   test-conda:
     name: Test conda ${{ matrix.packagekey }}, ${{matrix.blas_lib}} BLAS lib ${{ matrix.failok }}
@@ -311,11 +309,11 @@ jobs:
 
     steps:
       - name: Checkout Slycot
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: slycot-src
       - name: Checkout python-control
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: 'python-control/python-control'
           path: python-control
@@ -326,13 +324,14 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python }}
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
           activate-environment: test-env
           environment-file: slycot-src/.github/conda-env/test-env.yml
-          channels: conda-forge
           channel-priority: strict
           auto-activate-base: false
       - name: Download conda packages
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: slycot-conda-pkgs
           path: slycot-conda-pkgs
@@ -341,34 +340,33 @@ jobs:
           set -e
           case ${{ matrix.blas_lib }} in
             unset        ) # the conda-forge default (os dependent)
-              conda install libblas libcblas liblapack
+              mamba install libblas libcblas liblapack
               ;;
             Generic      )
-              conda install 'libblas=*=*netlib' 'libcblas=*=*netlib' 'liblapack=*=*netlib'
+              mamba install 'libblas=*=*netlib' 'libcblas=*=*netlib' 'liblapack=*=*netlib'
               echo "libblas * *netlib" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
             OpenBLAS     )
-              conda install 'libblas=*=*openblas' openblas
+              mamba install 'libblas=*=*openblas' openblas
               echo "libblas * *openblas" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
             Intel10_64lp )
-              conda install 'libblas=*=*mkl' mkl
+              mamba install 'libblas=*=*mkl' mkl
               echo "libblas * *mkl" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
           esac
-          conda index --no-progress ./slycot-conda-pkgs
-          conda install -c ./slycot-conda-pkgs slycot
+          mamba install -c ./slycot-conda-pkgs slycot
           conda list
       - name: Slycot and python-control tests
-        run: bash slycot-src/.github/scripts/run-tests.sh
-      - name: Report coverage
+        run: JOBNAME="$JOBNAME" bash slycot-src/.github/scripts/run-tests.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: conda-${{ matrix.packagekey }}-${{matrix.blas_lib}}
-          COVERALLS_PARALLEL: true
-        working-directory: slycot-src
-        # https://github.com/TheKevJames/coveralls-python/issues/252
-        run: coveralls --service=github
+          JOBNAME: conda ${{ matrix.packagekey }} ${{ matrix.blas_lib }}
+      - name: report coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          flag-name: wheel-${{ matrix.packagekey }}-${{matrix.blas_lib}}
+          parallel: true
+          file: slycot-src/coverage.xml
 
   coveralls-final:
     name: Finalize parallel coveralls
@@ -379,7 +377,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Coveralls Finished
-      uses: coverallsapp/github-action@master
+      uses: coverallsapp/github-action@v2
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
         parallel-finished: true
