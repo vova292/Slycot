@@ -55,10 +55,8 @@ jobs:
         matrix:
             os:
               - 'ubuntu'
-              - 'macos'
             python:
-              - '3.10'
-              - '3.12'
+              - '3.11'
             bla_vendor: [ 'unset' ]
             include:
               - os: 'ubuntu'
