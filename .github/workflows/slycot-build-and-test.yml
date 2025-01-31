@@ -104,14 +104,14 @@ jobs:
             unset | Generic | Apple ) ;; # Found in system
             OpenBLAS )
               brew install openblas
-              echo "BLAS_ROOT=/usr/local/opt/openblas/" >> $GITHUB_ENV
-              echo "LAPACK_ROOT=/usr/local/opt/openblas/" >> $GITHUB_ENV
+              echo "LDFLAGS=-L/opt/homebrew/opt/openblas/lib" >> $GITHUB_ENV
+              echo "CPPFLAGS=-I/opt/homebrew/opt/openblas/include" >> $GITHUB_ENV
               ;;
             *)
               echo "bla_vendor option ${{ matrix.bla_vendor }} not supported"
               exit 1 ;;
           esac
-          echo "FC=gfortran-11" >> $GITHUB_ENV
+          echo "FC=gfortran-14" >> $GITHUB_ENV
       - name: Build wheel
         env:
           BLA_VENDOR: ${{ matrix.bla_vendor }}
@@ -124,10 +124,11 @@ jobs:
           mkdir -p ${wheeldir}
           cp ./slycot*.whl ${wheeldir}/
       - name: Save wheel
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: slycot-wheels
+          name: slycot-wheels-${{ matrix.os }}-${{ matrix.python }}-${{ matrix.bla_vendor }}
           path: slycot-wheels
+          retention-days: 5
 
   build-conda:
     name: Build conda, ${{ matrix.os }}
@@ -151,33 +152,33 @@ jobs:
           fetch-depth: 0
           submodules: 'recursive'
       - name: Setup Conda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: ${{ matrix.python }}
           activate-environment: build-env
           environment-file: .github/conda-env/build-env.yml
           miniforge-version: latest
-          miniforge-variant: Mambaforge
           channel-priority: strict
           auto-update-conda: false
           auto-activate-base: false
       - name: Conda build
-        shell: bash -l {0}
+        shell: bash -el {0}
         run: |
           set -e
-          conda mambabuild conda-recipe
+          conda build conda-recipe
           # preserve directory structure for custom conda channel
           find "${CONDA_PREFIX}/conda-bld" -maxdepth 2 -name 'slycot*.tar.bz2' | while read -r conda_pkg; do
             conda_platform=$(basename $(dirname "${conda_pkg}"))
             mkdir -p "slycot-conda-pkgs/${conda_platform}"
             cp "${conda_pkg}" "slycot-conda-pkgs/${conda_platform}/"
           done
-          conda index --no-progress ./slycot-conda-pkgs
+          python -m conda_index ./slycot-conda-pkgs
       - name: Save to local conda pkg channel
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: slycot-conda-pkgs
+          name: slycot-conda-pkgs-${{ matrix.os }}-${{ matrix.python }}
           path: slycot-conda-pkgs
+          retention-days: 5
 
   create-wheel-test-matrix:
     name: Create wheel test matrix
@@ -187,10 +188,15 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: slycot-wheels
+          pattern: slycot-wheels-*
       - name: Checkout Slycot
         uses: actions/checkout@v3
       - name: Download wheels (if any)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: slycot-wheels
           path: slycot-wheels
@@ -205,10 +211,15 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: slycot-conda-pkgs
+          pattern: slycot-conda-pkgs-*
       - name: Checkout Slycot
         uses: actions/checkout@v3
       - name: Download conda packages
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: slycot-conda-pkgs
           path: slycot-conda-pkgs
@@ -247,7 +258,7 @@ jobs:
           sudo apt-get -y update
           case ${{ matrix.blas_lib }} in
             Generic )  sudo apt-get -y install libblas3 liblapack3 ;;
-            unset | OpenBLAS        ) sudo apt-get -y install libopenblas-base ;;
+            unset | OpenBLAS        ) sudo apt-get -y install libopenblas0 ;;
             *)
               echo "BLAS ${{ matrix.blas_lib }} not supported for wheels on Ubuntu"
               exit 1 ;;
@@ -270,7 +281,7 @@ jobs:
               exit 1 ;;
           esac
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: slycot-wheels
           path: slycot-wheels
@@ -303,7 +314,7 @@ jobs:
 
     defaults:
       run:
-        shell: bash -l {0}
+        shell: bash -el {0}
 
     steps:
       - name: Checkout Slycot
@@ -319,17 +330,16 @@ jobs:
         if: matrix.os == 'macos'
         run: brew install coreutils
       - name: Setup Conda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: ${{ matrix.python }}
           miniforge-version: latest
-          miniforge-variant: Mambaforge
           activate-environment: test-env
           environment-file: slycot-src/.github/conda-env/test-env.yml
           channel-priority: strict
           auto-activate-base: false
       - name: Download conda packages
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: slycot-conda-pkgs
           path: slycot-conda-pkgs
@@ -338,25 +348,25 @@ jobs:
           set -e
           case ${{ matrix.blas_lib }} in
             unset        ) # the conda-forge default (os dependent)
-              mamba install libblas libcblas liblapack
+              conda install libblas libcblas liblapack
               ;;
             Generic      )
-              mamba install 'libblas=*=*netlib' 'libcblas=*=*netlib' 'liblapack=*=*netlib'
+              conda install 'libblas=*=*netlib' 'libcblas=*=*netlib' 'liblapack=*=*netlib'
               echo "libblas * *netlib" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
             OpenBLAS     )
-              mamba install 'libblas=*=*openblas' openblas
+              conda install 'libblas=*=*openblas' openblas
               echo "libblas * *openblas" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
             Intel10_64lp )
-              mamba install 'libblas=*=*mkl' mkl
+              conda install 'libblas=*=*mkl' mkl
               echo "libblas * *mkl" >> $CONDA_PREFIX/conda-meta/pinned
               ;;
           esac
-          mamba install -c ./slycot-conda-pkgs slycot
+          conda install -c ./slycot-conda-pkgs slycot
           conda list
       - name: Slycot and python-control tests
-        run: JOBNAME="$JOBNAME" bash slycot-src/.github/scripts/run-tests.sh
+        run: JOBNAME="$JOBNAME" bash -el slycot-src/.github/scripts/run-tests.sh
         env:
           JOBNAME: conda ${{ matrix.packagekey }} ${{ matrix.blas_lib }}
       - name: report coverage
